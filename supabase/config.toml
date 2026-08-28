@@ -1,0 +1,8 @@
+[functions.super-admin-setup]
+verify_jwt = false
+
+[functions.send-inquiry-reply]
+verify_jwt = true
+
+[functions.notify-new-inquiry]
+verify_jwt = false
