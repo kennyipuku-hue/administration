@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, Eye, Pencil, Users as UsersIcon, ArrowLeft, Phone, Mail, MapPin, Heart, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Button, Card, PageHeader, Badge, Input, Select, Modal, Field, Textarea, EmptyState } from "@/components/ui";
@@ -17,9 +17,104 @@ export function Patients({ onRegister }: { onRegister: () => void }) {
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [selected, setSelected] = useState<Patient | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<Patient>>({});
-  const [loadError, setLoadError] = useState<string | null>(null);
+const [editing, setEditing] = useState(false);
+const [editForm, setEditForm] = useState<Partial<Patient>>({});
+const [loadError, setLoadError] = useState<string | null>(null);
+
+const [visits, setVisits] = useState<any[]>([]);
+const [visitsLoading, setVisitsLoading] = useState(false);
+
+ const [addingVisit, setAddingVisit] = useState(false);
+ const [selectedVisit, setSelectedVisit] = useState<any | null>(null);
+const [editingVisit, setEditingVisit] = useState(false);
+
+  const [visitForm, setVisitForm] = useState({
+    visit_date: new Date().toISOString().split("T")[0],
+    visit_time: "",
+    doctor_id: "",
+    reason_for_visit: "",
+    symptoms: "",
+    clinical_notes: "",
+    diagnosis: "",
+    treatment: "",
+    follow_up: "",
+    notes: "",
+  });
+
+const canvasRef = useRef<HTMLCanvasElement | null>(null);
+const drawingRef = useRef(false);
+
+const [penColor, setPenColor] = useState("#111827");
+const [tool, setTool] = useState<"pen" | "eraser">("pen");
+
+function startDrawing(e: React.PointerEvent<HTMLCanvasElement>) {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+
+  drawingRef.current = true;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const rect = canvas.getBoundingClientRect();
+
+  ctx.beginPath();
+  ctx.moveTo(
+    e.clientX - rect.left,
+    e.clientY - rect.top
+  );
+}
+
+function draw(e: React.PointerEvent<HTMLCanvasElement>) {
+  if (!drawingRef.current) return;
+
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const rect = canvas.getBoundingClientRect();
+
+  ctx.lineWidth = tool === "eraser" ? 12 : 2;
+ctx.lineCap = "round";
+ctx.lineJoin = "round";
+ctx.strokeStyle = tool === "eraser" ? "#fffdf7" : penColor;
+
+  ctx.lineTo(
+    e.clientX - rect.left,
+    e.clientY - rect.top
+  );
+
+  ctx.stroke();
+}
+
+function stopDrawing() {
+  drawingRef.current = false;
+}
+
+function clearDrawing() {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+  const [editVisitForm, setEditVisitForm] = useState({
+  visit_date: "",
+  visit_time: "",
+  doctor_id: "",
+  reason_for_visit: "",
+  symptoms: "",
+  clinical_notes: "",
+  diagnosis: "",
+  treatment: "",
+  follow_up: "",
+  notes: "",
+});
 
   async function load() {
     setLoading(true);
@@ -49,17 +144,45 @@ export function Patients({ onRegister }: { onRegister: () => void }) {
     return matchesSearch && matchesBranch;
   });
 
-  function openDetail(p: Patient) {
-    setSelected(p);
-    setEditing(false);
-    setEditForm({});
-    // load emergency contacts
-    supabase.from("patient_emergency_contacts").select("*").eq("patient_id", p.id).then(({ data }) => {
-      if (selected && data) {
-        setSelected({ ...selected, emergency_contacts: data as EmergencyContact[] });
-      }
+  async function openDetail(p: Patient) {
+  setSelected(p);
+  setEditing(false);
+  setEditForm({});
+  setVisits([]);
+  setVisitsLoading(true);
+
+  // Load emergency contacts
+  const { data: emergencyContacts } = await supabase
+    .from("patient_emergency_contacts")
+    .select("*")
+    .eq("patient_id", p.id);
+
+  if (emergencyContacts) {
+    setSelected({
+      ...p,
+      emergency_contacts: emergencyContacts as EmergencyContact[],
     });
   }
+
+  // Load medical visit history
+  const { data: visitData, error: visitError } = await supabase
+    .from("patient_visits")
+    .select(`
+      *,
+      doctor:employees(id, first_name, surname)
+    `)
+    .eq("patient_id", p.id)
+    .order("visit_date", { ascending: false })
+    .order("visit_time", { ascending: false });
+
+  if (visitError) {
+    console.error("Error loading patient visits:", visitError);
+  } else {
+    setVisits(visitData ?? []);
+  }
+
+  setVisitsLoading(false);
+}
 
   function startEdit() {
     if (!selected) return;
@@ -105,6 +228,58 @@ export function Patients({ onRegister }: { onRegister: () => void }) {
       setSelected(updated as Patient);
     }
   }
+
+  async function saveVisit() {
+  if (!selected) return;
+
+  const { data, error } = await supabase
+    .from("patient_visits")
+    .insert({
+      patient_id: selected.id,
+      visit_date: visitForm.visit_date,
+      visit_time: visitForm.visit_time || null,
+      doctor_id: visitForm.doctor_id || null,
+      reason_for_visit: visitForm.reason_for_visit || null,
+      symptoms: visitForm.symptoms || null,
+      clinical_notes: visitForm.clinical_notes || null,
+      diagnosis: visitForm.diagnosis || null,
+      treatment: visitForm.treatment || null,
+      follow_up: visitForm.follow_up || null,
+      notes: visitForm.notes || null,
+      handwriting_data: canvasRef.current?.toDataURL("image/png") || null,
+      status: "completed",
+    })
+    .select(`
+      *,
+      doctor:employees(id, first_name, surname)
+    `)
+    .single();
+
+  if (error) {
+    console.error("Error saving visit:", error);
+    setLoadError(error.message);
+    return;
+  }
+
+  if (data) {
+    setVisits((current) => [data, ...current]);
+  }
+
+  setVisitForm({
+    visit_date: new Date().toISOString().split("T")[0],
+    visit_time: "",
+    doctor_id: "",
+    reason_for_visit: "",
+    symptoms: "",
+    clinical_notes: "",
+    diagnosis: "",
+    treatment: "",
+    follow_up: "",
+    notes: "",
+  });
+
+  setAddingVisit(false);
+}
 
   return (
     <div>
@@ -221,6 +396,445 @@ export function Patients({ onRegister }: { onRegister: () => void }) {
             )}
 
             {selected.notes && <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400 mb-1">Notes</p><p className="text-sm text-slate-600">{selected.notes}</p></div>}
+            {/* Medical History */}
+<div className="rounded-lg border border-slate-200 p-4">
+  <div className="flex items-center justify-between mb-4">
+    <div>
+      <h4 className="text-sm font-semibold text-slate-800">
+        Medical History
+      </h4>
+      <p className="text-xs text-slate-400 mt-1">
+        {visits.length} visit{visits.length !== 1 ? "s" : ""} recorded
+      </p>
+    </div>
+
+    {canEdit && (
+      <Button
+  onClick={() => {
+    setVisitForm({
+      visit_date: new Date().toISOString().split("T")[0],
+      visit_time: "",
+      doctor_id: selected?.assigned_doctor_id ?? "",
+      reason_for_visit: "",
+      symptoms: "",
+      clinical_notes: "",
+      diagnosis: "",
+      treatment: "",
+      follow_up: "",
+      notes: "",
+    });
+
+    setAddingVisit(true);
+  }}
+>
+  + Add Visit Record
+</Button>
+    )}
+  </div>
+{addingVisit && (
+  <div className="rounded-xl border border-slate-200 bg-[#f8f5ed] p-5 shadow-sm">
+    {/* Paper header */}
+    <div className="mb-5 border-b border-slate-300 pb-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h4 className="font-serif text-xl font-semibold text-slate-800">
+            Clinical Visit Notes
+          </h4>
+          <p className="mt-1 text-sm text-slate-500">
+            {selected
+              ? `${fullName(selected.first_name, selected.surname)} · ${selected.patient_number ?? "No patient number"}`
+              : "Patient"}
+          </p>
+        </div>
+
+        <div className="text-right text-xs text-slate-500">
+          <div>
+            Date:{" "}
+            <strong className="text-slate-700">
+              {visitForm.visit_date}
+            </strong>
+          </div>
+          {visitForm.visit_time && (
+            <div className="mt-1">
+              Time:{" "}
+              <strong className="text-slate-700">
+                {visitForm.visit_time}
+              </strong>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* Basic visit information */}
+    <div className="mb-5 grid gap-4 sm:grid-cols-2">
+      <Field label="Visit Date">
+        <Input
+          type="date"
+          value={visitForm.visit_date}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              visit_date: e.target.value,
+            })
+          }
+        />
+      </Field>
+
+      <Field label="Visit Time">
+        <Input
+          type="time"
+          value={visitForm.visit_time}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              visit_time: e.target.value,
+            })
+          }
+        />
+      </Field>
+
+      <Field label="Doctor">
+        <Select
+          value={visitForm.doctor_id}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              doctor_id: e.target.value,
+            })
+          }
+        >
+          <option value="">Select doctor</option>
+
+          {selected?.assigned_doctor && (
+            <option value={selected.assigned_doctor.id}>
+              Dr {selected.assigned_doctor.first_name}{" "}
+              {selected.assigned_doctor.surname}
+            </option>
+          )}
+        </Select>
+      </Field>
+
+      <Field label="Reason for Visit">
+        <Input
+          value={visitForm.reason_for_visit}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              reason_for_visit: e.target.value,
+            })
+          }
+          placeholder="Reason for consultation..."
+        />
+      </Field>
+    </div>
+{/* Writing toolbar */}
+<div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2">
+  <span className="mr-2 text-xs font-semibold uppercase text-slate-400">
+    Pen
+  </span>
+
+  <button
+    type="button"
+    onClick={() => {
+      setTool("pen");
+      setPenColor("#111827");
+    }}
+    className={`flex h-9 w-9 items-center justify-center rounded-md border ${
+      tool === "pen" && penColor === "#111827"
+        ? "border-slate-900 bg-slate-100"
+        : "border-slate-200"
+    }`}
+    title="Black pen"
+  >
+    <span className="h-4 w-4 rounded-full bg-slate-900" />
+  </button>
+
+  <button
+    type="button"
+    onClick={() => {
+      setTool("pen");
+      setPenColor("#2563eb");
+    }}
+    className={`flex h-9 w-9 items-center justify-center rounded-md border ${
+      tool === "pen" && penColor === "#2563eb"
+        ? "border-blue-600 bg-blue-50"
+        : "border-slate-200"
+    }`}
+    title="Blue pen"
+  >
+    <span className="h-4 w-4 rounded-full bg-blue-600" />
+  </button>
+
+  <button
+    type="button"
+    onClick={() => {
+      setTool("pen");
+      setPenColor("#dc2626");
+    }}
+    className={`flex h-9 w-9 items-center justify-center rounded-md border ${
+      tool === "pen" && penColor === "#dc2626"
+        ? "border-red-600 bg-red-50"
+        : "border-slate-200"
+    }`}
+    title="Red pen"
+  >
+    <span className="h-4 w-4 rounded-full bg-red-600" />
+  </button>
+
+  <div className="mx-1 h-6 w-px bg-slate-200" />
+
+  <button
+    type="button"
+    onClick={() => setTool("eraser")}
+    className={`rounded-md border px-3 py-2 text-xs font-medium ${
+      tool === "eraser"
+        ? "border-slate-400 bg-slate-100 text-slate-800"
+        : "border-slate-200 text-slate-500"
+    }`}
+  >
+    Eraser
+  </button>
+
+  <button
+    type="button"
+    onClick={clearDrawing}
+    className="rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-600"
+  >
+    Clear
+  </button>
+</div>
+    {/* Paper writing area */}
+    <div className="relative overflow-hidden rounded-lg border border-slate-300 bg-[#fffdf7] shadow-inner">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(to bottom, transparent 0px, transparent 31px, #d9dee5 32px)",
+        }}
+      />
+
+      <div className="relative p-5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-serif text-sm font-semibold text-slate-700">
+            Doctor's Notes
+          </span>
+
+          <button
+            type="button"
+            onClick={clearDrawing}
+            className="text-xs font-medium text-slate-500 hover:text-red-600"
+          >
+            Clear handwriting
+          </button>
+        </div>
+
+        <canvas
+          ref={canvasRef}
+          width={900}
+          height={500}
+          className="block h-[500px] w-full touch-none cursor-crosshair"
+          onPointerDown={startDrawing}
+          onPointerMove={draw}
+          onPointerUp={stopDrawing}
+          onPointerLeave={stopDrawing}
+        />
+      </div>
+    </div>
+
+    {/* Typed clinical information */}
+    <div className="mt-6 space-y-4">
+      <Field label="Symptoms / Patient Complaint">
+        <Textarea
+          rows={3}
+          value={visitForm.symptoms}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              symptoms: e.target.value,
+            })
+          }
+          placeholder="Patient complaint or symptoms..."
+        />
+      </Field>
+
+      <Field label="Diagnosis">
+        <Textarea
+          rows={2}
+          value={visitForm.diagnosis}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              diagnosis: e.target.value,
+            })
+          }
+          placeholder="Diagnosis..."
+        />
+      </Field>
+
+      <Field label="Treatment / Medication">
+        <Textarea
+          rows={3}
+          value={visitForm.treatment}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              treatment: e.target.value,
+            })
+          }
+          placeholder="Treatment, medication, dosage..."
+        />
+      </Field>
+
+      <Field label="Follow-up Instructions">
+        <Textarea
+          rows={3}
+          value={visitForm.follow_up}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              follow_up: e.target.value,
+            })
+          }
+          placeholder="Follow-up instructions..."
+        />
+      </Field>
+
+      <Field label="Additional Notes">
+        <Textarea
+          rows={2}
+          value={visitForm.notes}
+          onChange={(e) =>
+            setVisitForm({
+              ...visitForm,
+              notes: e.target.value,
+            })
+          }
+          placeholder="Additional notes..."
+        />
+      </Field>
+    </div>
+
+    {/* Actions */}
+    <div className="mt-6 flex justify-end gap-2 border-t border-slate-300 pt-4">
+      <Button
+        variant="secondary"
+        onClick={() => setAddingVisit(false)}
+      >
+        Cancel
+      </Button>
+
+      <Button onClick={saveVisit}>
+        Save Visit Record
+      </Button>
+    </div>
+  </div>
+)}
+  {visitsLoading ? (
+    <div className="py-6 text-center text-sm text-slate-400">
+      Loading medical history...
+    </div>
+  ) : visits.length === 0 ? (
+    <div className="rounded-lg bg-slate-50 p-6 text-center">
+      <p className="text-sm text-slate-500">
+        No visit records yet.
+      </p>
+      {canEdit && (
+        <p className="text-xs text-slate-400 mt-1">
+          Add a visit record when this patient is seen.
+        </p>
+      )}
+    </div>
+  ) : (
+    <div className="space-y-3">
+      {visits.map((visit) => (
+        <div
+          key={visit.id}
+          className="rounded-lg border border-slate-100 bg-slate-50 p-4"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-medium text-slate-800">
+                {visit.reason_for_visit || "General Consultation"}
+              </p>
+
+              <p className="text-xs text-slate-500 mt-1">
+                {visit.visit_date}
+                {visit.visit_time ? ` · ${visit.visit_time}` : ""}
+              </p>
+
+              <p className="text-xs text-slate-500 mt-1">
+                Doctor:{" "}
+                {visit.doctor
+                  ? `Dr ${visit.doctor.first_name} ${visit.doctor.surname}`
+                  : "Not assigned"}
+              </p>
+            </div>
+
+            {visit.status && (
+              <Badge
+                color={
+                  visit.status === "completed"
+                    ? "green"
+                    : visit.status === "cancelled"
+                    ? "red"
+                    : "slate"
+                }
+              >
+                {visit.status}
+              </Badge>
+            )}
+          </div>
+
+          {visit.diagnosis && (
+            <div className="mt-3">
+              <p className="text-xs font-medium text-slate-400">
+                Diagnosis
+              </p>
+              <p className="text-sm text-slate-600">
+                {visit.diagnosis}
+              </p>
+            </div>
+          )}
+
+          {visit.clinical_notes && (
+            <div className="mt-3">
+              <p className="text-xs font-medium text-slate-400">
+                Clinical Notes
+              </p>
+              <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                {visit.clinical_notes}
+              </p>
+            </div>
+          )}
+          <div className="mt-4 flex justify-end">
+  <Button
+    variant="secondary"
+    onClick={() => {
+      setSelectedVisit(visit);
+      setEditingVisit(false);
+      setEditVisitForm({
+        visit_date: visit.visit_date ?? "",
+        visit_time: visit.visit_time ?? "",
+        doctor_id: visit.doctor_id ?? "",
+        reason_for_visit: visit.reason_for_visit ?? "",
+        symptoms: visit.symptoms ?? "",
+        clinical_notes: visit.clinical_notes ?? "",
+        diagnosis: visit.diagnosis ?? "",
+        treatment: visit.treatment ?? "",
+        follow_up: visit.follow_up ?? "",
+        notes: visit.notes ?? "",
+      });
+    }}
+  >
+    <Eye size={15} /> View
+  </Button>
+</div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
             {canEdit && (
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
@@ -257,7 +871,358 @@ export function Patients({ onRegister }: { onRegister: () => void }) {
             </div>
           </div>
         )}
+         </Modal>
+
+      {/* Visit Details / Edit Modal */}
+      <Modal
+        open={!!selectedVisit}
+        onClose={() => {
+          setSelectedVisit(null);
+          setEditingVisit(false);
+        }}
+        title={editingVisit ? "Edit Visit Record" : "Visit Details"}
+        size="xl"
+      >
+        {selectedVisit && (
+          <div className="space-y-4">
+
+            {!editingVisit ? (
+              <>
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <InfoRow
+                      label="Visit Date"
+                      value={selectedVisit.visit_date || "—"}
+                    />
+
+                    <InfoRow
+                      label="Visit Time"
+                      value={selectedVisit.visit_time || "—"}
+                    />
+
+                    <InfoRow
+                      label="Doctor"
+                      value={
+                        selectedVisit.doctor
+                          ? `Dr ${selectedVisit.doctor.first_name} ${selectedVisit.doctor.surname}`
+                          : "Not assigned"
+                      }
+                    />
+
+                    <InfoRow
+                      label="Status"
+                      value={selectedVisit.status || "—"}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+
+                  {selectedVisit.handwriting_data && (
+  <div>
+    <p className="mb-2 text-xs font-semibold uppercase text-slate-400">
+      Doctor's Handwritten Notes
+    </p>
+
+    <div className="overflow-hidden rounded-lg border border-slate-300 bg-[#fffdf7] shadow-inner">
+      <img
+        src={selectedVisit.handwriting_data}
+        alt="Doctor's handwritten notes"
+        className="block w-full"
+      />
+    </div>
+  </div>
+)}
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-400 mb-1">
+                      Reason for Visit
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {selectedVisit.reason_for_visit || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-400 mb-1">
+                      Symptoms / Patient Complaint
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {selectedVisit.symptoms || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-400 mb-1">
+                      Clinical Notes
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {selectedVisit.clinical_notes || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-400 mb-1">
+                      Diagnosis
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {selectedVisit.diagnosis || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-400 mb-1">
+                      Treatment / Medication
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {selectedVisit.treatment || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-400 mb-1">
+                      Follow-up Instructions
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {selectedVisit.follow_up || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-slate-400 mb-1">
+                      Additional Notes
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                      {selectedVisit.notes || "—"}
+                    </p>
+                  </div>
+
+                </div>
+
+                <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setSelectedVisit(null)}
+                  >
+                    Close
+                  </Button>
+
+                  {canEdit && (
+                    <Button
+                      onClick={() => setEditingVisit(true)}
+                    >
+                      <Pencil size={16} />
+                      Edit Visit
+                    </Button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-4">
+
+                <div className="grid gap-4 sm:grid-cols-2">
+
+                  <Field label="Visit Date">
+                    <Input
+                      type="date"
+                      value={editVisitForm.visit_date}
+                      onChange={(e) =>
+                        setEditVisitForm({
+                          ...editVisitForm,
+                          visit_date: e.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+
+                  <Field label="Visit Time">
+                    <Input
+                      type="time"
+                      value={editVisitForm.visit_time}
+                      onChange={(e) =>
+                        setEditVisitForm({
+                          ...editVisitForm,
+                          visit_time: e.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+
+                  <Field label="Doctor">
+                    <Select
+                      value={editVisitForm.doctor_id}
+                      onChange={(e) =>
+                        setEditVisitForm({
+                          ...editVisitForm,
+                          doctor_id: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">Select doctor</option>
+
+                      {selected?.assigned_doctor && (
+                        <option value={selected.assigned_doctor.id}>
+                          Dr {selected.assigned_doctor.first_name}{" "}
+                          {selected.assigned_doctor.surname}
+                        </option>
+                      )}
+                    </Select>
+                  </Field>
+
+                  <Field label="Reason for Visit">
+                    <Input
+                      value={editVisitForm.reason_for_visit}
+                      onChange={(e) =>
+                        setEditVisitForm({
+                          ...editVisitForm,
+                          reason_for_visit: e.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+
+                </div>
+
+                <Field label="Symptoms / Patient Complaint">
+                  <Textarea
+                    rows={3}
+                    value={editVisitForm.symptoms}
+                    onChange={(e) =>
+                      setEditVisitForm({
+                        ...editVisitForm,
+                        symptoms: e.target.value,
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Clinical Notes">
+                  <Textarea
+                    rows={4}
+                    value={editVisitForm.clinical_notes}
+                    onChange={(e) =>
+                      setEditVisitForm({
+                        ...editVisitForm,
+                        clinical_notes: e.target.value,
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Diagnosis">
+                  <Textarea
+                    rows={2}
+                    value={editVisitForm.diagnosis}
+                    onChange={(e) =>
+                      setEditVisitForm({
+                        ...editVisitForm,
+                        diagnosis: e.target.value,
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Treatment / Medication">
+                  <Textarea
+                    rows={3}
+                    value={editVisitForm.treatment}
+                    onChange={(e) =>
+                      setEditVisitForm({
+                        ...editVisitForm,
+                        treatment: e.target.value,
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Follow-up Instructions">
+                  <Textarea
+                    rows={3}
+                    value={editVisitForm.follow_up}
+                    onChange={(e) =>
+                      setEditVisitForm({
+                        ...editVisitForm,
+                        follow_up: e.target.value,
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Additional Notes">
+                  <Textarea
+                    rows={2}
+                    value={editVisitForm.notes}
+                    onChange={(e) =>
+                      setEditVisitForm({
+                        ...editVisitForm,
+                        notes: e.target.value,
+                      })
+                    }
+                  />
+                </Field>
+
+                <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setEditingVisit(false)}
+                  >
+                    Cancel
+                  </Button>
+
+                  <Button
+  onClick={async () => {
+    if (!selectedVisit) return;
+
+    const { data, error } = await supabase
+      .from("patient_visits")
+      .update({
+        visit_date: editVisitForm.visit_date,
+        visit_time: editVisitForm.visit_time || null,
+        doctor_id: editVisitForm.doctor_id || null,
+        reason_for_visit: editVisitForm.reason_for_visit || null,
+        symptoms: editVisitForm.symptoms || null,
+        clinical_notes: editVisitForm.clinical_notes || null,
+        diagnosis: editVisitForm.diagnosis || null,
+        treatment: editVisitForm.treatment || null,
+        follow_up: editVisitForm.follow_up || null,
+        notes: editVisitForm.notes || null,
+      })
+      .eq("id", selectedVisit.id)
+      .select(`
+        *,
+        doctor:employees(id, first_name, surname)
+      `)
+      .single();
+
+    if (error) {
+      console.error("Error updating visit:", error);
+      setLoadError(error.message);
+      return;
+    }
+
+    if (data) {
+      setSelectedVisit(data);
+
+      setVisits((current) =>
+        current.map((visit) =>
+          visit.id === data.id ? data : visit
+        )
+      );
+    }
+
+    setEditingVisit(false);
+  }}
+>
+  Save Changes
+</Button>
+                </div>
+
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
+
     </div>
   );
 }

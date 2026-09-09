@@ -43,7 +43,28 @@ export function Queue() {
     setBranches(brs as Branch[] ?? []);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+  load();
+
+  const channel = supabase
+    .channel("patient-queue-realtime")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "patient_queue",
+      },
+      () => {
+        load();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, []);
 
   function openAdd() {
     loadFormOptions();

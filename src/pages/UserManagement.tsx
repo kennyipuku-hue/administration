@@ -74,7 +74,7 @@ export function UserManagement() {
     load();
   }
 
-  const canDeleteUser = isSuperAdmin(profile?.role);
+  const canDeleteUser = isSuperAdmin(currentUser?.role);
 
   async function deleteUser(user: UserProfile) {
     if (user.id === currentUser?.id) return;

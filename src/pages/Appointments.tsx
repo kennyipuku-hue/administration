@@ -49,7 +49,28 @@ export function Appointments() {
     setBranches(brs as Branch[] ?? []);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+  load();
+
+  const channel = supabase
+    .channel("appointments-realtime")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "appointments",
+      },
+      () => {
+        load();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, []);
 
   function openNew() {
     loadFormOptions();
@@ -84,9 +105,13 @@ export function Appointments() {
     load();
   }
 
-  const statusColors: Record<string, "green" | "red" | "amber" | "slate"> = {
-    scheduled: "amber", completed: "green", cancelled: "red", no_show: "slate",
-  };
+  const statusColors: Record<string, "green" | "red" | "amber" | "slate" | "teal"> = {
+  scheduled: "amber",
+  queued: "teal",
+  completed: "green",
+  cancelled: "red",
+  no_show: "slate",
+};
 
   return (
     <div>

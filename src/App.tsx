@@ -11,6 +11,7 @@ import { Patients } from "@/pages/Patients";
 import { RegisterPatient } from "@/pages/RegisterPatient";
 import { ImportCSV } from "@/pages/ImportCSV";
 import { Appointments } from "@/pages/Appointments";
+import { AppointmentRequestsPage } from "@/pages/AppointmentRequestsPage";
 import { Queue } from "@/pages/Queue";
 import { Inquiries } from "@/pages/Inquiries";
 import { DailyReport } from "@/pages/DailyReport";
@@ -111,6 +112,7 @@ function AppContent() {
       case "audit": return <AuditLogs />;
       case "settings": return <SettingsPage />;
       case "users": return <UserManagement />;
+      case "appointment-requests": return <AppointmentRequestsPage />;
       default: return <Dashboard onNavigate={setPage} />;
     }
   }
