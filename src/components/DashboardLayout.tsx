@@ -37,6 +37,7 @@ const navItems: NavItem[] = [
   { label: "Register Patient", icon: <HeartPulse size={18} />, page: "register" },
   { label: "Import CSV", icon: <FileUp size={18} />, page: "import" },
   { label: "Appointments", icon: <CalendarDays size={18} />, page: "appointments" },
+  { label: "Appointment Requests", icon: <CalendarDays size={18} />, page: "appointment-requests" },
   { label: "Queue", icon: <ListOrdered size={18} />, page: "queue" },
   { label: "Inquiries", icon: <Inbox size={18} />, page: "inquiries" },
   { label: "Daily Report", icon: <FileText size={18} />, page: "report" },
