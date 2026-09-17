@@ -19,6 +19,36 @@ import { AuditLogs } from "@/pages/AuditLogs";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { UserManagement } from "@/pages/UserManagement";
 
+const MAINTENANCE_MODE = true;
+
+function MaintenancePage() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-6">
+      <div className="max-w-xl text-center">
+
+        <p className="mb-4 text-8xl font-black tracking-tight text-teal-400 sm:text-9xl">
+          404
+        </p>
+
+        <h1 className="mb-6 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          Oops! We couldn't find the page you're looking for.
+        </h1>
+
+        <p className="mx-auto mb-8 max-w-lg text-base leading-7 text-slate-400">
+          The page you are trying to access may have been moved, removed,
+          or is temporarily unavailable.
+        </p>
+
+        <div className="inline-flex items-center gap-3 rounded-full border border-slate-800 bg-slate-900 px-5 py-3 text-sm text-slate-300">
+          <span className="h-2 w-2 rounded-full bg-teal-400" />
+          Please contact the administrator for assistance.
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
   const { session, profile, loading } = useAuth();
   const [page, setPage] = useState("dashboard");
@@ -125,6 +155,10 @@ function AppContent() {
 }
 
 export default function App() {
+  if (MAINTENANCE_MODE) {
+    return <MaintenancePage />;
+  }
+
   return (
     <AuthProvider>
       <AppContent />

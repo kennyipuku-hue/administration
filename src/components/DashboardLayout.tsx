@@ -70,9 +70,10 @@ export function DashboardLayout({ currentPage, onNavigate, children }: LayoutPro
   const roleBadgeColor = role === "super_admin" ? "bg-teal-100 text-teal-700" : role === "admin" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600";
 
   function handleNav(page: string) {
-    onNavigate(page);
-    setMobileOpen(false);
-  }
+  console.log("NAVIGATION CLICKED:", page);
+  onNavigate(page);
+  setMobileOpen(false);
+}
 
   const sidebar = (
     <div className="flex h-full flex-col">
