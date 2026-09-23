@@ -19,7 +19,7 @@ import { AuditLogs } from "@/pages/AuditLogs";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { UserManagement } from "@/pages/UserManagement";
 
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 
 function MaintenancePage() {
   return (
