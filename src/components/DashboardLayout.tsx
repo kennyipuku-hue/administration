@@ -17,6 +17,7 @@ import {
   ListOrdered,
   Inbox,
   FileText,
+  CreditCard,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { isSuperAdmin, canManage, fullName } from "@/lib/utils";
@@ -40,12 +41,14 @@ const navItems: NavItem[] = [
   { label: "Appointment Requests", icon: <CalendarDays size={18} />, page: "appointment-requests" },
   { label: "Queue", icon: <ListOrdered size={18} />, page: "queue" },
   { label: "Inquiries", icon: <Inbox size={18} />, page: "inquiries" },
+  {label: "Payment Reminders",icon: <CreditCard size={18} />,page: "payment-reminders" },
   { label: "Daily Report", icon: <FileText size={18} />, page: "report" },
   { label: "Doctors & Staff", icon: <Stethoscope size={18} />, page: "employees" },
   { label: "Branches", icon: <Building2 size={18} />, page: "branches" },
   { label: "User Management", icon: <UserCog size={18} />, page: "users" },
   { label: "Audit Logs", icon: <ClipboardList size={18} />, page: "audit" },
   { label: "Settings", icon: <Settings size={18} />, page: "settings" },
+  { label: "Billing", icon: <CreditCard size={18} />, page: "billing" },
 ];
 
 interface LayoutProps {

@@ -18,6 +18,7 @@ import { DailyReport } from "@/pages/DailyReport";
 import { AuditLogs } from "@/pages/AuditLogs";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { UserManagement } from "@/pages/UserManagement";
+import { PaymentReminders } from "@/pages/PaymentReminders";
 
 const MAINTENANCE_MODE = true;
 
@@ -71,7 +72,7 @@ function AppContent() {
         if (res.ok && data.superAdminExists !== undefined) {
           setNeedsSetup(!data.superAdminExists);
         } else {
-          // If the edge function fails, fall back to showing the login page
+          // If the edge function fails, fall back to s wild you're not Day howing the login page
           // rather than the setup page — this is safer when an admin exists.
           setNeedsSetup(false);
         }
@@ -142,6 +143,7 @@ function AppContent() {
       case "audit": return <AuditLogs />;
       case "settings": return <SettingsPage />;
       case "users": return <UserManagement />;
+      case "payment-reminders": return <PaymentReminders />;
       case "appointment-requests": return <AppointmentRequestsPage />;
       default: return <Dashboard onNavigate={setPage} />;
     }
