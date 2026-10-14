@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/auth";
 import { isSuperAdmin, canManage, fullName } from "@/lib/utils";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useNotifications } from "@/lib/useNotifications";
+import { supabase } from "@/lib/supabase";
 
 interface NavItem {
   label: string;
@@ -63,6 +64,45 @@ export function DashboardLayout({ currentPage, onNavigate, children }: LayoutPro
   const role = profile?.role;
   const { counts } = useNotifications();
 
+  const [unpaidPaymentCount, setUnpaidPaymentCount] = useState(0);
+
+useEffect(() => {
+  let mounted = true;
+
+  async function loadUnpaidPaymentCount() {
+    const { count, error } = await supabase
+      .from("doctor_payment_reminders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "unpaid");
+
+    if (!error && mounted) {
+      setUnpaidPaymentCount(count ?? 0);
+    }
+  }
+
+  loadUnpaidPaymentCount();
+
+  const channel = supabase
+    .channel("payment-reminder-sidebar-count")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "doctor_payment_reminders",
+      },
+      () => {
+        loadUnpaidPaymentCount();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    mounted = false;
+    supabase.removeChannel(channel);
+  };
+}, []);
+
   const visibleItems = navItems.filter((item) => {
     if (item.superAdminOnly && !isSuperAdmin(role)) return false;
     if (item.adminOnly && !canManage(role)) return false;
@@ -95,6 +135,10 @@ export function DashboardLayout({ currentPage, onNavigate, children }: LayoutPro
         {visibleItems.map((item) => {
           const active = currentPage === item.page;
           const badge = counts[item.page];
+          const paymentBadge =
+  item.page === "payment-reminders" && unpaidPaymentCount > 0
+    ? unpaidPaymentCount
+    : null;
           return (
             <button
               key={item.page}
@@ -106,12 +150,24 @@ export function DashboardLayout({ currentPage, onNavigate, children }: LayoutPro
               <span className={active ? "text-teal-600" : "text-slate-400"}>{item.icon}</span>
               <span className="flex-1 text-left">{item.label}</span>
               {badge != null && badge > 0 && (
-                <span className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
-                  item.page === "inquiries" ? "bg-amber-500" : item.page === "queue" ? "bg-teal-500" : "bg-amber-500"
-                }`}>
-                  {badge > 99 ? "99+" : badge}
-                </span>
-              )}
+  <span
+    className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
+      item.page === "inquiries"
+        ? "bg-amber-500"
+        : item.page === "queue"
+          ? "bg-teal-500"
+          : "bg-amber-500"
+    }`}
+  >
+    {badge > 99 ? "99+" : badge}
+  </span>
+)}
+
+{paymentBadge !== null && (
+  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+    {paymentBadge > 99 ? "99+" : paymentBadge}
+  </span>
+)}
             </button>
           );
         })}
