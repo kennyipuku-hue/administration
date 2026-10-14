@@ -20,7 +20,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { UserManagement } from "@/pages/UserManagement";
 import { PaymentReminders } from "@/pages/PaymentReminders";
 
-const MAINTENANCE_MODE = false;
+const MAINTENANCE_MODE = true;
 
 function MaintenancePage() {
   return (
